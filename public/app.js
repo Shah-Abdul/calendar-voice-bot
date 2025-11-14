@@ -21,7 +21,36 @@ const API_URL = window.location.origin;
 document.addEventListener('DOMContentLoaded', () => {
     loadEvents();
     setupEventListeners();
+    initializeVoices();
 });
+
+// Initialize Web Speech API voices
+function initializeVoices() {
+    if ('speechSynthesis' in window) {
+        // Load voices
+        speechSynthesis.getVoices();
+        
+        // Voices are loaded asynchronously, so we need to listen for the event
+        speechSynthesis.onvoiceschanged = () => {
+            const voices = speechSynthesis.getVoices();
+            const hindiVoices = voices.filter(voice => 
+                voice.lang.startsWith('hi')
+            );
+            
+            console.log('Available voices:', voices.length);
+            console.log('Hindi voices available:', hindiVoices.length);
+            
+            if (hindiVoices.length > 0) {
+                console.log('Hindi voices:', hindiVoices.map(v => `${v.name} (${v.lang})`));
+            } else {
+                console.warn('⚠️ No Hindi voices found. Hindi TTS may not work properly.');
+                console.log('Tip: Install Hindi language pack in your OS for better Hindi voice support.');
+            }
+        };
+    } else {
+        console.warn('⚠️ Web Speech API not supported in this browser');
+    }
+}
 
 // Setup Event Listeners
 function setupEventListeners() {
@@ -186,7 +215,12 @@ function displayResults(data) {
     responseBox.classList.remove('hidden');
     
     // Play audio response
-    if (data.audio) {
+    // Use Web Speech API for Hindi, Deepgram audio for English
+    if (data.intent && data.intent.language === 'hi') {
+        console.log('Using Web Speech API for Hindi');
+        speakWithWebAPI(data.response, 'hi-IN');
+    } else if (data.audio) {
+        console.log('Using Deepgram TTS for English');
         playAudio(data.audio);
     }
     
@@ -198,7 +232,7 @@ function displayResults(data) {
     console.log('Intent:', data.intent);
 }
 
-// Play Audio
+// Play Audio (Deepgram TTS)
 function playAudio(base64Audio) {
     try {
         const audio = new Audio(`data:audio/mp3;base64,${base64Audio}`);
@@ -207,6 +241,56 @@ function playAudio(base64Audio) {
         });
     } catch (error) {
         console.error('Error creating audio:', error);
+    }
+}
+
+// Speak using Web Speech API (for Hindi)
+function speakWithWebAPI(text, language) {
+    try {
+        // Check if browser supports Web Speech API
+        if (!('speechSynthesis' in window)) {
+            console.warn('Web Speech API not supported, falling back to text only');
+            return;
+        }
+        
+        // Cancel any ongoing speech
+        speechSynthesis.cancel();
+        
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = language;
+        utterance.rate = 0.9; // Slightly slower for clarity
+        utterance.pitch = 1.0;
+        utterance.volume = 1.0;
+        
+        // Try to find a Hindi voice
+        const voices = speechSynthesis.getVoices();
+        const hindiVoice = voices.find(voice => 
+            voice.lang.startsWith('hi') || voice.lang.startsWith('hi-IN')
+        );
+        
+        if (hindiVoice) {
+            utterance.voice = hindiVoice;
+            console.log('Using Hindi voice:', hindiVoice.name);
+        } else {
+            console.log('No Hindi voice found, using default');
+        }
+        
+        utterance.onstart = () => {
+            console.log('Speech started');
+        };
+        
+        utterance.onend = () => {
+            console.log('Speech ended');
+        };
+        
+        utterance.onerror = (event) => {
+            console.error('Speech error:', event.error);
+        };
+        
+        speechSynthesis.speak(utterance);
+        
+    } catch (error) {
+        console.error('Error with Web Speech API:', error);
     }
 }
 

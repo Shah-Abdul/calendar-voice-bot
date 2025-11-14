@@ -239,20 +239,24 @@ async function executeAction(intent) {
 
 // Generate speech from text using Deepgram
 async function generateSpeech(text, language) {
-  console.log('Generating speech for:', text);
+  console.log('Generating speech for:', text, 'in language:', language);
   
   try {
-    // Deepgram TTS - Aura model supports multiple languages
+    // Choose voice based on language
+    // Note: Deepgram doesn't have native Hindi TTS, so we'll use English voice for both
+    // For production, consider using Google Cloud TTS or Azure TTS for Hindi
+    const model = 'aura-asteria-en'; // High-quality English voice
+    
     const response = await deepgram.speak.request(
       { text },
       {
-        model: 'aura-asteria-en', // High-quality English voice
+        model: model,
         encoding: 'mp3'
-        // ,
-        // container: 'wav'
       }
     );
-    console.log('after speak request')
+    
+    console.log('TTS response received');
+    
     // Get the audio stream
     const stream = await response.getStream();
     if (!stream) {
@@ -266,6 +270,7 @@ async function generateSpeech(text, language) {
     }
     
     const buffer = Buffer.concat(chunks);
+    console.log('TTS audio generated, size:', buffer.length, 'bytes');
     return buffer.toString('base64');
   } catch (error) {
     console.error('Error generating speech:', error);
@@ -287,22 +292,45 @@ app.post('/api/voice', upload.single('audio'), async (req, res) => {
     // Step 1: Transcribe audio with Deepgram
     console.log('Step 1: Transcribing audio...');
     
-    const { result: transcriptionResult, error: transcriptionError } = await deepgram.listen.prerecorded.transcribeFile(
+    // Try English first
+    const { result: enResult, error: enError } = await deepgram.listen.prerecorded.transcribeFile(
       req.file.buffer,
       {
         model: 'nova-2',
         smart_format: true,
-        language: 'multi', // Auto-detect English or Hindi
+        language: 'en',
         punctuate: true
       }
     );
 
-    if (transcriptionError) {
-      throw new Error(`Deepgram transcription error: ${transcriptionError.message}`);
+    // Try Hindi
+    const { result: hiResult, error: hiError } = await deepgram.listen.prerecorded.transcribeFile(
+      req.file.buffer,
+      {
+        model: 'nova-2',
+        smart_format: true,
+        language: 'hi',
+        punctuate: true
+      }
+    );
+
+    if (enError && hiError) {
+      throw new Error(`Deepgram transcription failed for both languages`);
     }
 
-    const transcribedText = transcriptionResult.results.channels[0].alternatives[0].transcript;
-    console.log('Transcription:', transcribedText);
+    // Get transcriptions and confidence scores
+    const enText = enResult?.results?.channels?.[0]?.alternatives?.[0]?.transcript || '';
+    const hiText = hiResult?.results?.channels?.[0]?.alternatives?.[0]?.transcript || '';
+    const enConfidence = enResult?.results?.channels?.[0]?.alternatives?.[0]?.confidence || 0;
+    const hiConfidence = hiResult?.results?.channels?.[0]?.alternatives?.[0]?.confidence || 0;
+
+    // Use the transcription with higher confidence
+    const transcribedText = hiConfidence > enConfidence ? hiText : enText;
+    const detectedLanguage = hiConfidence > enConfidence ? 'hi' : 'en';
+    
+    console.log('English transcription:', enText, 'confidence:', enConfidence);
+    console.log('Hindi transcription:', hiText, 'confidence:', hiConfidence);
+    console.log('Selected:', transcribedText, 'language:', detectedLanguage);
 
     // Step 2: Process intent with Claude
     console.log('Step 2: Processing intent...');
