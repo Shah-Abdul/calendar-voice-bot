@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calendar Voice Bot</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📅 Calendar Voice Bot</h1>
+            <p class="subtitle">Multi-lingual AI Assistant • English + हिंदी</p>
+        </header>
+
+        <div class="main-card">
+            <!-- Microphone Button -->
+            <div class="mic-section">
+                <button id="micButton" class="mic-button" aria-label="Record voice">
+                    <svg class="mic-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                        <line x1="12" y1="19" x2="12" y2="23"></line>
+                        <line x1="8" y1="23" x2="16" y2="23"></line>
+                    </svg>
+                </button>
+                <p id="statusText" class="status-text">Click to speak</p>
+            </div>
+
+            <!-- Transcription Display -->
+            <div id="transcriptionBox" class="message-box hidden">
+                <div class="message-label">You said:</div>
+                <div id="transcriptionText" class="message-content"></div>
+            </div>
+
+            <!-- Response Display -->
+            <div id="responseBox" class="message-box hidden">
+                <div class="message-label">Assistant:</div>
+                <div id="responseText" class="message-content"></div>
+            </div>
+
+            <!-- Text Input (Testing) -->
+            <div class="text-input-section">
+                <input 
+                    type="text" 
+                    id="textInput" 
+                    placeholder="Or type your command here..."
+                    class="text-input"
+                />
+                <button id="sendTextButton" class="send-button">Send</button>
+            </div>
+        </div>
+
+        <!-- Events List -->
+        <div class="events-section">
+            <h2>Your Events</h2>
+            <div id="eventsList" class="events-list">
+                <p class="empty-state">No events scheduled yet</p>
+            </div>
+        </div>
+
+        <!-- Examples -->
+        <div class="examples-section">
+            <h3>Try saying:</h3>
+            <div class="examples-grid">
+                <div class="example-card">
+                    <div class="example-lang">🇬🇧 English</div>
+                    <ul>
+                        <li>"Schedule a meeting with Sarah tomorrow at 3 PM"</li>
+                        <li>"What do I have on Friday?"</li>
+                        <li>"Cancel my afternoon meeting"</li>
+                    </ul>
+                </div>
+                <div class="example-card">
+                    <div class="example-lang">🇮🇳 हिंदी</div>
+                    <ul>
+                        <li>"कल शाम 5 बजे मीटिंग रखो"</li>
+                        <li>"आज मेरी क्या मीटिंग है?"</li>
+                        <li>"मेरी सुबह की मीटिंग कैंसल करो"</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
