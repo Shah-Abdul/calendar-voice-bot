@@ -213,23 +213,32 @@ function displayResults(data) {
     transcriptionText.textContent = data.transcription;
     transcriptionBox.classList.remove('hidden');
     
+    // Handle calendar actions locally and get enhanced response
+    let spokenResponse = data.response;
+    if (data.intent) {
+        const actionResult = handleCalendarAction(data.intent);
+        if (actionResult && actionResult.spokenResponse) {
+            spokenResponse = actionResult.spokenResponse;
+        }
+    }
+    
     // Show response
-    responseText.textContent = data.response;
+    responseText.textContent = spokenResponse;
     responseBox.classList.remove('hidden');
     
     // Play audio response
     // Use Web Speech API for Hindi, Deepgram audio for English
     if (data.intent && data.intent.language === 'hi') {
         console.log('Using Web Speech API for Hindi');
-        speakWithWebAPI(data.response, 'hi-IN');
-    } else if (data.audio) {
+        speakWithWebAPI(spokenResponse, 'hi-IN');
+    } else if (data.audio && data.intent.action !== 'LIST_EVENTS') {
+        // For LIST_EVENTS, we'll speak the enhanced response instead
         console.log('Using Deepgram TTS for English');
         playAudio(data.audio);
-    }
-    
-    // Handle calendar actions locally
-    if (data.intent) {
-        handleCalendarAction(data.intent);
+    } else if (data.intent.action === 'LIST_EVENTS') {
+        // Speak the enhanced response with event details
+        console.log('Speaking event list');
+        speakWithWebAPI(spokenResponse, data.intent.language === 'hi' ? 'hi-IN' : 'en-US');
     }
     
     console.log('Intent:', data.intent);
@@ -238,6 +247,7 @@ function displayResults(data) {
 // Handle Calendar Actions (localStorage-based)
 function handleCalendarAction(intent) {
     let events = getEventsFromStorage();
+    let spokenResponse = null;
     
     switch (intent.action) {
         case 'ADD_EVENT':
@@ -275,13 +285,52 @@ function handleCalendarAction(intent) {
             break;
             
         case 'LIST_EVENTS':
-            // Just refresh the display
             console.log('Listing events from localStorage');
+            // Generate spoken response with event details
+            spokenResponse = generateEventListResponse(events, intent.language);
             break;
     }
     
     // Update display
     displayEvents(events);
+    
+    return { spokenResponse };
+}
+
+// Generate spoken response for event list
+function generateEventListResponse(events, language) {
+    if (!events || events.length === 0) {
+        return language === 'hi' 
+            ? 'आपके पास कोई इवेंट शेड्यूल नहीं है।'
+            : 'You have no events scheduled.';
+    }
+    
+    // Sort events by date and time
+    const sortedEvents = [...events].sort((a, b) => {
+        const dateA = new Date(`${a.date}T${a.time}`);
+        const dateB = new Date(`${b.date}T${b.time}`);
+        return dateA - dateB;
+    });
+    
+    if (language === 'hi') {
+        let response = `आपके पास ${events.length} इवेंट हैं। `;
+        sortedEvents.forEach((event, index) => {
+            const date = new Date(`${event.date}T${event.time}`);
+            const timeStr = date.toLocaleTimeString('hi-IN', { hour: 'numeric', minute: '2-digit', hour12: true });
+            const dateStr = date.toLocaleDateString('hi-IN', { weekday: 'long', month: 'long', day: 'numeric' });
+            response += `${index + 1}. ${event.title}, ${dateStr} को ${timeStr} बजे। `;
+        });
+        return response;
+    } else {
+        let response = `You have ${events.length} event${events.length > 1 ? 's' : ''}. `;
+        sortedEvents.forEach((event, index) => {
+            const date = new Date(`${event.date}T${event.time}`);
+            const timeStr = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+            const dateStr = date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+            response += `${index + 1}. ${event.title}, on ${dateStr} at ${timeStr}. `;
+        });
+        return response;
+    }
 }
 
 // Play Audio (Deepgram TTS)
