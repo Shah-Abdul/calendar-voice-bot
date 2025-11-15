@@ -2,8 +2,6 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
-const fs = require('fs').promises;
-const path = require('path');
 const Anthropic = require('@anthropic-ai/sdk');
 const { createClient } = require('@deepgram/sdk');
 
@@ -26,9 +24,6 @@ app.use(express.static('public'));
 // Multer configuration for audio upload
 const upload = multer({ storage: multer.memoryStorage() });
 
-// Calendar file path
-const CALENDAR_FILE = path.join(__dirname, 'calendar.json');
-
 // Helper: Get current date for context
 function getCurrentDate() {
   const now = new Date();
@@ -40,28 +35,7 @@ function getCurrentDate() {
   };
 }
 
-// Helper: Load calendar events
-async function loadEvents() {
-  try {
-    const data = await fs.readFile(CALENDAR_FILE, 'utf8');
-    return JSON.parse(data);
-  } catch (error) {
-    // If file doesn't exist, return empty array
-    return [];
-  }
-}
-
-// Helper: Save calendar events
-async function saveEvents(events) {
-  await fs.writeFile(CALENDAR_FILE, JSON.stringify(events, null, 2));
-}
-
-// Helper: Generate unique ID
-function generateId() {
-  return Date.now().toString(36) + Math.random().toString(36).substr(2);
-}
-
-// System prompt for GPT
+// System prompt for Claude
 function getSystemPrompt() {
   const currentDate = getCurrentDate();
   return `You are a multilingual calendar assistant that supports English and Hindi. Today is ${currentDate.fullDate} (${currentDate.dayOfWeek}).
@@ -184,57 +158,12 @@ async function processIntent(transcription) {
   }
 }
 
-// Execute calendar action
+// Execute calendar action (simplified - storage handled by frontend)
 async function executeAction(intent) {
-  const events = await loadEvents();
-  let updatedEvents = [...events];
-  let resultMessage = intent.response;
-
-  switch (intent.action) {
-    case 'ADD_EVENT':
-      const newEvent = {
-        id: generateId(),
-        title: intent.data.title,
-        date: intent.data.date,
-        time: intent.data.time,
-        language: intent.language,
-        createdAt: new Date().toISOString()
-      };
-      updatedEvents.push(newEvent);
-      await saveEvents(updatedEvents);
-      console.log('Event added:', newEvent);
-      break;
-
-    case 'LIST_EVENTS':
-      // Events will be returned to frontend
-      console.log('Listing events:', updatedEvents.length);
-      break;
-
-    case 'DELETE_EVENT':
-      const query = intent.data.query.toLowerCase();
-      const beforeCount = updatedEvents.length;
-      
-      // Try to match by time, title, or date
-      updatedEvents = updatedEvents.filter(event => {
-        const matchTime = event.time && event.time.includes(query);
-        const matchTitle = event.title && event.title.toLowerCase().includes(query);
-        const matchDate = event.date && event.date.includes(query);
-        return !(matchTime || matchTitle || matchDate);
-      });
-      
-      const deletedCount = beforeCount - updatedEvents.length;
-      await saveEvents(updatedEvents);
-      console.log(`Deleted ${deletedCount} event(s)`);
-      
-      if (deletedCount === 0) {
-        resultMessage = intent.language === 'hi' 
-          ? 'मुझे वह इवेंट नहीं मिला।' 
-          : "I couldn't find that event.";
-      }
-      break;
-  }
-
-  return { events: updatedEvents, message: resultMessage };
+  // Just return the response message
+  // Frontend handles all storage in localStorage
+  console.log('Action:', intent.action);
+  return { message: intent.response };
 }
 
 // Generate speech from text using Deepgram
@@ -350,7 +279,6 @@ app.post('/api/voice', upload.single('audio'), async (req, res) => {
       transcription: transcribedText,
       response: actionResult.message,
       audio: audioBase64,
-      events: actionResult.events,
       intent: intent
     });
 
@@ -389,7 +317,6 @@ app.post('/api/text', async (req, res) => {
       transcription: text,
       response: actionResult.message,
       audio: audioBase64,
-      events: actionResult.events,
       intent: intent
     });
 
@@ -402,18 +329,14 @@ app.post('/api/text', async (req, res) => {
   }
 });
 
-// GET /api/events - Get all events
+// GET /api/events - Get all events (now handled by frontend localStorage)
 app.get('/api/events', async (req, res) => {
-  try {
-    const events = await loadEvents();
-    res.json({ events });
-  } catch (error) {
-    console.error('Error in /api/events:', error);
-    res.status(500).json({ 
-      error: 'Failed to load events',
-      details: error.message 
-    });
-  }
+  // Events are stored in browser localStorage
+  // This endpoint is kept for compatibility but returns empty
+  res.json({ 
+    events: [],
+    message: 'Events are stored in browser localStorage'
+  });
 });
 
 // Health check

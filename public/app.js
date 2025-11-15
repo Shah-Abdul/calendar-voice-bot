@@ -17,6 +17,9 @@ let isRecording = false;
 // API Base URL
 const API_URL = window.location.origin;
 
+// LocalStorage key for events
+const EVENTS_STORAGE_KEY = 'calendar_voice_bot_events';
+
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
     loadEvents();
@@ -224,12 +227,61 @@ function displayResults(data) {
         playAudio(data.audio);
     }
     
-    // Update events list
-    if (data.events) {
-        displayEvents(data.events);
+    // Handle calendar actions locally
+    if (data.intent) {
+        handleCalendarAction(data.intent);
     }
     
     console.log('Intent:', data.intent);
+}
+
+// Handle Calendar Actions (localStorage-based)
+function handleCalendarAction(intent) {
+    let events = getEventsFromStorage();
+    
+    switch (intent.action) {
+        case 'ADD_EVENT':
+            if (intent.data && intent.data.title) {
+                const newEvent = {
+                    id: Date.now().toString(36) + Math.random().toString(36).substr(2),
+                    title: intent.data.title,
+                    date: intent.data.date,
+                    time: intent.data.time,
+                    language: intent.language,
+                    createdAt: new Date().toISOString()
+                };
+                events = addEventToStorage(newEvent);
+                console.log('Event added to localStorage:', newEvent);
+            }
+            break;
+            
+        case 'DELETE_EVENT':
+            if (intent.data && intent.data.query) {
+                const query = intent.data.query.toLowerCase();
+                const beforeCount = events.length;
+                
+                // Filter out matching events
+                const filteredEvents = events.filter(event => {
+                    const matchTime = event.time && event.time.includes(query);
+                    const matchTitle = event.title && event.title.toLowerCase().includes(query);
+                    const matchDate = event.date && event.date.includes(query);
+                    return !(matchTime || matchTitle || matchDate);
+                });
+                
+                saveEventsToStorage(filteredEvents);
+                events = filteredEvents;
+                console.log(`Deleted ${beforeCount - events.length} event(s)`);
+            }
+            break;
+            
+        case 'LIST_EVENTS':
+            // Just refresh the display
+            console.log('Listing events from localStorage');
+            break;
+    }
+    
+    // Update display
+    displayEvents(events);
 }
 
 // Play Audio (Deepgram TTS)
@@ -294,21 +346,45 @@ function speakWithWebAPI(text, language) {
     }
 }
 
+// LocalStorage Event Management
+function getEventsFromStorage() {
+    try {
+        const eventsJson = localStorage.getItem(EVENTS_STORAGE_KEY);
+        return eventsJson ? JSON.parse(eventsJson) : [];
+    } catch (error) {
+        console.error('Error reading from localStorage:', error);
+        return [];
+    }
+}
+
+function saveEventsToStorage(events) {
+    try {
+        localStorage.setItem(EVENTS_STORAGE_KEY, JSON.stringify(events));
+        console.log('Events saved to localStorage:', events.length);
+    } catch (error) {
+        console.error('Error saving to localStorage:', error);
+    }
+}
+
+function addEventToStorage(event) {
+    const events = getEventsFromStorage();
+    events.push(event);
+    saveEventsToStorage(events);
+    return events;
+}
+
+function deleteEventFromStorage(eventId) {
+    const events = getEventsFromStorage();
+    const filteredEvents = events.filter(e => e.id !== eventId);
+    saveEventsToStorage(filteredEvents);
+    return filteredEvents;
+}
+
 // Load Events
 async function loadEvents() {
-    try {
-        const response = await fetch(`${API_URL}/api/events`);
-        
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        displayEvents(data.events);
-        
-    } catch (error) {
-        console.error('Error loading events:', error);
-    }
+    // Load from localStorage
+    const events = getEventsFromStorage();
+    displayEvents(events);
 }
 
 // Display Events
@@ -363,44 +439,24 @@ function createEventCard(event) {
 }
 
 // Handle Delete Event
-async function handleDeleteEvent(eventId) {
+function handleDeleteEvent(eventId) {
     if (!confirm('Are you sure you want to delete this event?')) {
         return;
     }
     
     try {
-        // Find the event to get its time for deletion
-        const response = await fetch(`${API_URL}/api/events`);
-        const data = await response.json();
-        const event = data.events.find(e => e.id === eventId);
+        // Delete from localStorage
+        const events = deleteEventFromStorage(eventId);
         
-        if (!event) {
-            throw new Error('Event not found');
-        }
-        
-        // Use the text API to delete by time
-        const deleteResponse = await fetch(`${API_URL}/api/text`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ 
-                text: `Cancel my ${event.time} meeting` 
-            })
-        });
-        
-        if (!deleteResponse.ok) {
-            throw new Error(`HTTP error! status: ${deleteResponse.status}`);
-        }
-        
-        const result = await deleteResponse.json();
-        
-        // Update events list
-        displayEvents(result.events);
+        // Update display
+        displayEvents(events);
         
         // Show success message
-        responseText.textContent = result.response;
+        const message = 'Event deleted successfully';
+        responseText.textContent = message;
         responseBox.classList.remove('hidden');
+        
+        console.log('Event deleted:', eventId);
         
     } catch (error) {
         console.error('Error deleting event:', error);
